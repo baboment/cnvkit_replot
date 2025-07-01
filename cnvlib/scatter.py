@@ -3,7 +3,8 @@ import collections
 import logging
 
 import numpy as np
-from matplotlib import pyplot
+from matplotlib import pyplot, cm
+from matplotlib.colors import Normalize
 from skgenome.rangelabel import unpack_range
 
 from . import core, params, plots
@@ -14,6 +15,20 @@ HIGHLIGHT_COLOR = "gold"
 POINT_COLOR = "#606060"
 SEG_COLOR = "darkorange"
 TREND_COLOR = "#A0A0A0"
+
+
+def _colors_and_sizes(log2_values):
+    """Return colors and marker sizes based on log2 values."""
+    if len(log2_values) == 0:
+        return [], []
+    log2_array = np.asarray(log2_values)
+    max_abs = np.nanmax(np.abs(log2_array))
+    if max_abs == 0:
+        max_abs = 1.0
+    norm = Normalize(vmin=-max_abs, vmax=max_abs)
+    colors = cm.seismic(norm(log2_array))
+    sizes = 20 + 40 * np.abs(log2_array) / max_abs
+    return colors, sizes
 
 
 def do_scatter(
@@ -179,13 +194,15 @@ def cnv_on_genome(
         if probes and chrom in chrom_probes:
             subprobes = chrom_probes[chrom]
             x = 0.5 * (subprobes["start"] + subprobes["end"]) + x_offset
+            colors, sizes = _colors_and_sizes(subprobes["log2"]) 
             axis.scatter(
                 x,
                 subprobes["log2"],
                 marker=".",
-                color=POINT_COLOR,
+                s=sizes,
+                c=colors,
                 edgecolor="none",
-                alpha=0.2,
+                alpha=0.7,
             )
             if do_trend:
                 # ENH break trendline by chromosome arm boundaries?
@@ -485,10 +502,7 @@ def cnv_on_chromosome(
     # Get scatter plot coordinates
     x = 0.5 * (probes["start"] + probes["end"]) * MB  # bin midpoints
     y = probes["log2"]
-    if "weight" in probes:
-        w = 46 * probes["weight"] ** 2 + 2
-    else:
-        w = np.repeat(30, len(x))
+    colors, sizes = _colors_and_sizes(y)
 
     # Configure axes
     if not y_min:
@@ -506,27 +520,31 @@ def cnv_on_chromosome(
 
     if antitarget_marker in (None, "o"):
         # Plot targets and antitargets with the same marker
-        axis.scatter(x, y, w, color=POINT_COLOR, alpha=0.4, marker="o")
+        axis.scatter(x, y, s=sizes, c=colors, alpha=0.6, marker="o")
     else:
         # Use the given marker to plot antitargets separately
         x_fg = []
         y_fg = []
-        w_fg = []
+        s_fg = []
+        c_fg = []
         x_bg = []
         y_bg = []
-        # w_bg = []
+        s_bg = []
+        c_bg = []
         is_bg = probes["gene"].isin(params.ANTITARGET_ALIASES)
-        for x_pt, y_pt, w_pt, is_bg_pt in zip(x, y, w, is_bg):
+        for x_pt, y_pt, s_pt, col_pt, is_bg_pt in zip(x, y, sizes, colors, is_bg):
             if is_bg_pt:
                 x_bg.append(x_pt)
                 y_bg.append(y_pt)
-                # w_bg.append(w_pt)
+                s_bg.append(s_pt)
+                c_bg.append(col_pt)
             else:
                 x_fg.append(x_pt)
                 y_fg.append(y_pt)
-                w_fg.append(w_pt)
-        axis.scatter(x_fg, y_fg, w_fg, color=POINT_COLOR, alpha=0.4, marker="o")
-        axis.scatter(x_bg, y_bg, color=POINT_COLOR, alpha=0.5, marker=antitarget_marker)
+                s_fg.append(s_pt)
+                c_fg.append(col_pt)
+        axis.scatter(x_fg, y_fg, s=s_fg, c=c_fg, alpha=0.6, marker="o")
+        axis.scatter(x_bg, y_bg, s=s_bg, c=c_bg, alpha=0.5, marker=antitarget_marker)
 
     # Add a local trend line
     if do_trend:
