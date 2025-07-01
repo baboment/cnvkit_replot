@@ -46,7 +46,15 @@ def do_scatter(
 
     if not show_gene and not show_range:
         fig = genome_scatter(
-            cnarr, segments, variants, do_trend, y_min, y_max, title, segment_color
+            cnarr,
+            segments,
+            variants,
+            do_trend,
+            y_min,
+            y_max,
+            title,
+            segment_color,
+            fig_size,
         )
     else:
         if by_bin:
@@ -65,14 +73,12 @@ def do_scatter(
             y_max,
             title,
             segment_color,
+            fig_size,
         )
 
     if by_bin:
         # Reset to avoid permanently altering the value of cnvlib.scatter.MB
         MB = orig_mb
-    if fig_size:
-        width, height = fig_size
-        fig.set_size_inches(w=width, h=height)
     return fig
 
 
@@ -88,10 +94,12 @@ def genome_scatter(
     y_max=None,
     title=None,
     segment_color=SEG_COLOR,
+    fig_size=None,
 ):
     """Plot all chromosomes, concatenated on one plot."""
     if (cnarr or segments) and variants:
         # Lay out top 3/5 for the CN scatter, bottom 2/5 for SNP plot
+        pyplot.figure(figsize=fig_size or (32, 6))
         axgrid = pyplot.GridSpec(5, 1, hspace=0.85)
         axis = pyplot.subplot(axgrid[:3])
         axis2 = pyplot.subplot(axgrid[3:], sharex=axis)
@@ -102,7 +110,7 @@ def genome_scatter(
             axis2, variants, chrom_sizes, segments, do_trend, segment_color
         )
     else:
-        _fig, axis = pyplot.subplots()
+        _fig, axis = pyplot.subplots(figsize=fig_size or (32, 6))
     if title is None:
         title = (cnarr or segments or variants).sample_id
     if cnarr or segments:
@@ -287,6 +295,7 @@ def chromosome_scatter(
     y_max,
     title,
     segment_color,
+    fig_size=None,
 ):
     """Plot a specified region on one chromosome.
 
@@ -311,6 +320,7 @@ def chromosome_scatter(
         # Plot CNVs at chromosome level
         if variants:
             # Lay out top 3/5 for the CN scatter, bottom 2/5 for SNP plot
+            pyplot.figure(figsize=fig_size)
             axgrid = pyplot.GridSpec(5, 1, hspace=0.5)
             axis = pyplot.subplot(axgrid[:3])
             axis2 = pyplot.subplot(axgrid[3:], sharex=axis)
@@ -319,7 +329,7 @@ def chromosome_scatter(
                 axis2, sel_snvs, sel_segs, genes, do_trend, by_bin, segment_color
             )
         else:
-            _fig, axis = pyplot.subplots()
+            _fig, axis = pyplot.subplots(figsize=fig_size)
             if by_bin:
                 axis.set_xlabel("Position (bin)")
             else:
@@ -338,7 +348,7 @@ def chromosome_scatter(
         )
     elif variants:
         # Only plot SNVs in a single-panel layout
-        _fig, axis = pyplot.subplots()
+        _fig, axis = pyplot.subplots(figsize=fig_size)
         axis = snv_on_chromosome(
             axis, sel_snvs, sel_segs, genes, do_trend, by_bin, segment_color
         )
