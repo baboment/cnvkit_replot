@@ -27,7 +27,7 @@ def do_scatter(
     window_width=1e6,
     y_min=None,
     y_max=None,
-    fig_size=None,
+    fig_size=(32, 6),
     antitarget_marker=None,
     segment_color=SEG_COLOR,
     title=None,

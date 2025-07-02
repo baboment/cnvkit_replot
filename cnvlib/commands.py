@@ -1495,7 +1495,7 @@ def _cmd_scatter(args):
                 except ValueError as exc:
                     # Probably no bins in the selected region
                     logging.warning("Not plotting region %r: %s", to_label(region), exc)
-                pdf_out.savefig()
+                pdf_out.savefig(dpi=400)
                 pyplot.close()
     else:
         if args.title is not None:
@@ -1505,7 +1505,7 @@ def _cmd_scatter(args):
         )
         if args.output:
             oformat = os.path.splitext(args.output)[-1].replace(".", "")
-            pyplot.savefig(args.output, format=oformat, bbox_inches="tight")
+            pyplot.savefig(args.output, format=oformat, bbox_inches="tight", dpi=400)
             logging.info("Wrote %s", args.output)
         else:
             pyplot.show()
@@ -1595,8 +1595,8 @@ P_scatter_aes.add_argument(
     nargs=2,
     metavar=("WIDTH", "HEIGHT"),
     type=float,
-    help="""Width and height of the plot in inches. [Default: Pre-defined in Matplotlib
-            'rcParams' variable (most of the time: '6.4 4.8')]""",
+    default=(32, 6),
+    help="""Width and height of the plot in inches. [Default: 32 6]""",
 )
 
 P_scatter_vcf = P_scatter.add_argument_group("To plot SNP b-allele frequencies")

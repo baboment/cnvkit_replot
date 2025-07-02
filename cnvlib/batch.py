@@ -307,7 +307,12 @@ def batch_run_sample(
 
     if plot_scatter:
         scatter.do_scatter(cnarr, seg_final)
-        pyplot.savefig(sample_pfx + "-scatter.png", format="png", bbox_inches="tight")
+        pyplot.savefig(
+            sample_pfx + "-scatter.png",
+            format="png",
+            bbox_inches="tight",
+            dpi=400,
+        )
         logging.info("Wrote %s-scatter.png", sample_pfx)
 
     if plot_diagram:
