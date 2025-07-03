@@ -54,6 +54,8 @@ def plot_chromosome_dividers(axis, chrom_sizes, pad=None, along="x"):
         axis.set_xticklabels(list(chrom_sizes.keys()), rotation=90)
         axis.tick_params(labelsize="small")
         axis.tick_params(axis="x", length=0)
+        axis.tick_params(axis="x", labelbottom=False, labeltop=True)
+        axis.xaxis.set_ticks_position("top")
         axis.get_yaxis().tick_left()
     else:
         axis.set_ylim(0, curr_offset)
