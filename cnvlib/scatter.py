@@ -1,6 +1,7 @@
 """The 'scatter' command for rendering copy number as scatter plots."""
 import collections
 import logging
+from matplotlib.lines import Line2D
 
 import numpy as np
 from matplotlib import pyplot
@@ -14,6 +15,13 @@ HIGHLIGHT_COLOR = "gold"
 POINT_COLOR = "#606060"
 SEG_COLOR = "darkorange"
 TREND_COLOR = "#A0A0A0"
+SEG_COLORS = [
+    (-1.1, "#4575b4"),
+    (-0.25, "#91bfdb"),
+    (0.0, TREND_COLOR),
+    (0.2, "#fdae61"),
+    (0.7, "#d73027"),
+]
 
 
 def do_scatter(
@@ -212,6 +220,11 @@ def cnv_on_genome(
                     solid_capstyle="round",
                     snap=False,
                 )
+    handles = [
+        Line2D([0], [0], color=col, linewidth=3, label=str(val))
+        for val, col in SEG_COLORS
+    ]
+    axis.legend(handles=handles, title="Segment log2")
     return axis
 
 
@@ -575,6 +588,11 @@ def cnv_on_chromosome(
                 clip_on=False,
                 zorder=10,
             )
+    handles = [
+        Line2D([0], [0], color=col, linewidth=3, label=str(val))
+        for val, col in SEG_COLORS
+    ]
+    axis.legend(handles=handles, title="Segment log2")
     return axis
 
 
