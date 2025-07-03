@@ -106,12 +106,12 @@ def genome_scatter(
     if title is None:
         title = (cnarr or segments or variants).sample_id
     if cnarr or segments:
-        axis.set_title(title)
+        axis.set_title(title, fontsize=14)
         axis = cnv_on_genome(
             axis, cnarr, segments, do_trend, y_min, y_max, segment_color
         )
     else:
-        axis.set_title(f"Variant allele frequencies: {title}")
+        axis.set_title(f"Variant allele frequencies: {title}", fontsize=14)
         chrom_sizes = collections.OrderedDict(
             (chrom, subarr["end"].max()) for chrom, subarr in variants.by_chromosome()
         )
@@ -345,7 +345,7 @@ def chromosome_scatter(
 
     if title is None:
         title = "%s %s" % ((cnarr or segments or variants).sample_id, chrom)
-    axis.set_title(title)
+    axis.set_title(title, fontsize=14)
     return axis.get_figure()
 
 
