@@ -23,6 +23,13 @@ SEG_COLORS = [
     (0.7, "#d73027"),
 ]
 
+def _color_from_log2(value):
+    """Return a color based on the log2 cutoff mapping."""
+    for cutoff, color in SEG_COLORS:
+        if value >= cutoff:
+            return color
+    return SEG_COLORS[-1][1]
+
 
 def do_scatter(
     cnarr,
@@ -114,12 +121,12 @@ def genome_scatter(
     if title is None:
         title = (cnarr or segments or variants).sample_id
     if cnarr or segments:
-        axis.set_title(title)
+        axis.set_title(title, fontsize=14)
         axis = cnv_on_genome(
             axis, cnarr, segments, do_trend, y_min, y_max, segment_color
         )
     else:
-        axis.set_title(f"Variant allele frequencies: {title}")
+        axis.set_title(f"Variant allele frequencies: {title}", fontsize=14)
         chrom_sizes = collections.OrderedDict(
             (chrom, subarr["end"].max()) for chrom, subarr in variants.by_chromosome()
         )
@@ -211,7 +218,7 @@ def cnv_on_genome(
 
         if chrom in chrom_segs:
             for seg in chrom_segs[chrom]:
-                color = choose_segment_color(seg, segment_color)
+                color = choose_segment_color(seg)
                 axis.plot(
                     (seg.start + x_offset, seg.end + x_offset),
                     (seg.log2, seg.log2),
@@ -265,9 +272,7 @@ def snv_on_genome(axis, variants, chrom_sizes, segments, do_trend, segment_color
             for seg, v_freq in get_segment_vafs(snvs, segs):
                 if seg:
                     posn = [seg.start + x_offset, seg.end + x_offset]
-                    color = choose_segment_color(
-                        seg, segment_color, default_bright=False
-                    )
+                    color = choose_segment_color(seg, default_bright=False)
                 else:
                     posn = [snvs.start.iat[0] + x_offset, snvs.start.iat[-1] + x_offset]
                     color = TREND_COLOR
@@ -358,7 +363,7 @@ def chromosome_scatter(
 
     if title is None:
         title = "%s %s" % ((cnarr or segments or variants).sample_id, chrom)
-    axis.set_title(title)
+    axis.set_title(title, fontsize=14)
     return axis.get_figure()
 
 
@@ -555,7 +560,7 @@ def cnv_on_chromosome(
     # Draw segments as horizontal lines
     if segments:
         for row in segments:
-            color = choose_segment_color(row, segment_color)
+            color = choose_segment_color(row)
             axis.plot(
                 (row.start * MB, row.end * MB),
                 (row.log2, row.log2),
@@ -577,13 +582,14 @@ def cnv_on_chromosome(
             # Signal them as triangles crossing y-axis:
             x_hidden = segments.start[hidden_seg] * MB
             y_hidden = np.array([y_min] * len(x_hidden))
+            colors = [_color_from_log2(v) for v in segments.log2[hidden_seg]]
             axis.scatter(
                 x_hidden,
                 y_hidden,
                 marker="^",
                 linewidth=3,
                 snap=False,
-                color=segment_color,
+                color=colors,
                 edgecolor="none",
                 clip_on=False,
                 zorder=10,
@@ -618,7 +624,7 @@ def snv_on_chromosome(axis, variants, segments, genes, do_trend, by_bin, segment
         for seg, v_freq in get_segment_vafs(variants, segments):
             if seg:
                 posn = [seg.start * MB, seg.end * MB]
-                color = choose_segment_color(seg, segment_color, default_bright=False)
+                color = choose_segment_color(seg, default_bright=False)
             else:
                 posn = [variants.start.iat[0] * MB, variants.start.iat[-1] * MB]
                 color = TREND_COLOR
@@ -687,15 +693,16 @@ def setup_chromosome(axis, y_min=None, y_max=None, y_label=None):
 # === Shared ===
 
 
-def choose_segment_color(segment, highlight_color, default_bright=True):
+def choose_segment_color(segment, default_bright=True):
     """Choose a display color based on a segment's CNA status.
 
-    Uses the fields added by the 'call' command. If these aren't present, use
-    `highlight_color` for everything.
+    Uses the fields added by the 'call' command. If these aren't present, use a
+    color derived from :data:`SEG_COLORS`.
 
     For sex chromosomes, some single-copy deletions or gains might not be
     highlighted, since sample sex isn't used to infer the neutral ploidies.
     """
+    highlight_color = _color_from_log2(segment.log2)
     neutral_color = TREND_COLOR
     if "cn" not in segment._fields:
         # No 'call' info
