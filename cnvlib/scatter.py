@@ -18,11 +18,13 @@ SEG_COLOR = "darkorange"
 TREND_COLOR = "#A0A0A0"
 SEG_CMAP = pyplot.get_cmap("coolwarm")
 SEG_COLORS = [
-    (-1.1, "#4575b4"),
-    (-0.25, "#91bfdb"),
+    (-1.1, "#08306b"),
+    (-0.5, "#2171b5"),
+    (-0.25, "#6baed6"),
     (0.0, TREND_COLOR),
-    (0.2, "#fdae61"),
-    (0.7, "#d73027"),
+    (0.25, "#fdbb84"),
+    (0.5, "#ef6548"),
+    (0.7, "#b30000"),
 ]
 
 def _color_from_log2(value, norm=None):
@@ -46,7 +48,7 @@ def do_scatter(
     window_width=1e6,
     y_min=None,
     y_max=None,
-    fig_size=(32, 6),
+    fig_size=(24, 5),
     antitarget_marker=None,
     segment_color=SEG_COLOR,
     title=None,
@@ -111,9 +113,9 @@ def genome_scatter(
     """Plot all chromosomes, concatenated on one plot."""
     if (cnarr or segments) and variants:
         # Lay out top 3/5 for the CN scatter, bottom 2/5 for SNP plot
-        axgrid = pyplot.GridSpec(5, 1, hspace=0.85)
-        axis = pyplot.subplot(axgrid[:3])
-        axis2 = pyplot.subplot(axgrid[3:], sharex=axis)
+        axgrid = pyplot.GridSpec(2, 1, height_ratios=[2, 1], hspace=0.85)
+        axis = pyplot.subplot(axgrid[0])
+        axis2 = pyplot.subplot(axgrid[1], sharex=axis)
         # Place chromosome labels between the CNR and SNP plots
         axis2.tick_params(labelbottom=False)
         chrom_sizes = plots.chromosome_sizes(cnarr or segments)
@@ -340,9 +342,9 @@ def chromosome_scatter(
         # Plot CNVs at chromosome level
         if variants:
             # Lay out top 3/5 for the CN scatter, bottom 2/5 for SNP plot
-            axgrid = pyplot.GridSpec(5, 1, hspace=0.5)
-            axis = pyplot.subplot(axgrid[:3])
-            axis2 = pyplot.subplot(axgrid[3:], sharex=axis)
+            axgrid = pyplot.GridSpec(2, 1, height_ratios=[2, 1], hspace=0.5)
+            axis = pyplot.subplot(axgrid[0])
+            axis2 = pyplot.subplot(axgrid[1], sharex=axis)
             # Plot allele freqs for only the selected region
             snv_on_chromosome(
                 axis2, sel_snvs, sel_segs, genes, do_trend, by_bin, segment_color
