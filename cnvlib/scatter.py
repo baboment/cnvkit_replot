@@ -127,9 +127,8 @@ def genome_scatter(
     if title is None:
         title = (cnarr or segments or variants).sample_id
     if cnarr or segments:
-        axis.set_title(title, fontsize=14)
         axis = cnv_on_genome(
-            axis, cnarr, segments, do_trend, y_min, y_max, segment_color
+            axis, cnarr, segments, do_trend, y_min, y_max, segment_color, title
         )
     else:
         axis.set_title(f"Variant allele frequencies: {title}", fontsize=14)
@@ -150,6 +149,7 @@ def cnv_on_genome(
     y_min=None,
     y_max=None,
     segment_color=SEG_COLOR,
+    title=None,
 ):
     """Plot bin ratios and/or segments for all chromosomes on one plot."""
     # Configure axes etc.
@@ -198,7 +198,24 @@ def cnv_on_genome(
         seg_norm = colors.Normalize(vmin=segments.log2.min(), vmax=segments.log2.max())
 
     # Plot points & segments
-    x_starts = plots.plot_chromosome_dividers(axis, chrom_sizes)
+    pad = 0.003 * sum(chrom_sizes.values())
+    x_starts = collections.OrderedDict()
+    curr_offset = pad
+    label_positions = []
+    for chrom, size in chrom_sizes.items():
+        x_starts[chrom] = curr_offset
+        axis.axvline(x=curr_offset, color="k", linewidth=2, zorder=20)
+        if probes and chrom in chrom_probes:
+            subprobes = chrom_probes[chrom]
+            pos = 0.5 * (subprobes["start"].min() + subprobes["end"].max()) + curr_offset
+        else:
+            pos = curr_offset + 0.5 * size
+        label_positions.append((pos, chrom))
+        curr_offset += size + 2 * pad
+    if label_positions:
+        axis.axvline(x=curr_offset - pad, color="k", linewidth=2, zorder=20)
+    axis.set_xlim(0, curr_offset)
+
     for chrom, x_offset in x_starts.items():
         if probes and chrom in chrom_probes:
             subprobes = chrom_probes[chrom]
@@ -237,10 +254,34 @@ def cnv_on_genome(
                     solid_capstyle="round",
                     snap=False,
                 )
+
+    axis.set_xticks([p[0] for p in label_positions])
+    axis.set_xticklabels(
+        [f"chr{p[1]}" for p in label_positions],
+        fontsize=28,
+        rotation=75,
+        ha="center",
+        va="top",
+    )
+    axis.set_ylabel("Segment log2", fontsize=28)
+    axis.tick_params(axis="y", labelsize=24)
+    axis.tick_params(axis="x", labelsize=24)
+    if title is not None:
+        axis.set_title(title, fontsize=32)
+    axis.tick_params(which="minor", bottom=False, left=False)
+    axis.spines["right"].set_visible(False)
+    axis.spines["top"].set_visible(False)
+
     if seg_norm is not None:
         sm = cm.ScalarMappable(norm=seg_norm, cmap=SEG_CMAP)
         sm.set_array([])
-        axis.get_figure().colorbar(sm, ax=axis, label="Segment log2")
+        cbar = axis.get_figure().colorbar(
+            sm, ax=axis, orientation="vertical", pad=0.01, aspect=30
+        )
+        cbar.set_label("Segment log2", fontsize=28)
+        cbar.ax.tick_params(labelsize=24)
+
+    pyplot.subplots_adjust(bottom=0.18, left=0.04, right=0.98, top=0.90)
     return axis
 
 
