@@ -2,6 +2,7 @@
 import collections
 import logging
 from matplotlib.lines import Line2D
+from matplotlib import colors, cm
 
 import numpy as np
 from matplotlib import pyplot
@@ -15,6 +16,7 @@ HIGHLIGHT_COLOR = "gold"
 POINT_COLOR = "#606060"
 SEG_COLOR = "darkorange"
 TREND_COLOR = "#A0A0A0"
+SEG_CMAP = pyplot.get_cmap("coolwarm")
 SEG_COLORS = [
     (-1.1, "#4575b4"),
     (-0.25, "#91bfdb"),
@@ -23,8 +25,10 @@ SEG_COLORS = [
     (0.7, "#d73027"),
 ]
 
-def _color_from_log2(value):
-    """Return a color based on the log2 cutoff mapping."""
+def _color_from_log2(value, norm=None):
+    """Return a color based on the log2 value."""
+    if norm is not None:
+        return SEG_CMAP(norm(value))
     for cutoff, color in SEG_COLORS:
         if value >= cutoff:
             return color
@@ -187,6 +191,9 @@ def cnv_on_genome(
         chrom_sizes = plots.chromosome_sizes(segments)
     # Same for segment calls
     chrom_segs = dict(segments.by_chromosome()) if segments else {}
+    seg_norm = None
+    if segments is not None and len(segments):
+        seg_norm = colors.Normalize(vmin=segments.log2.min(), vmax=segments.log2.max())
 
     # Plot points & segments
     x_starts = plots.plot_chromosome_dividers(axis, chrom_sizes)
@@ -201,6 +208,7 @@ def cnv_on_genome(
                 color=POINT_COLOR,
                 edgecolor="none",
                 alpha=0.2,
+                s=15,
             )
             if do_trend:
                 # ENH break trendline by chromosome arm boundaries?
@@ -218,7 +226,7 @@ def cnv_on_genome(
 
         if chrom in chrom_segs:
             for seg in chrom_segs[chrom]:
-                color = choose_segment_color(seg)
+                color = choose_segment_color(seg, norm=seg_norm)
                 axis.plot(
                     (seg.start + x_offset, seg.end + x_offset),
                     (seg.log2, seg.log2),
@@ -227,11 +235,10 @@ def cnv_on_genome(
                     solid_capstyle="round",
                     snap=False,
                 )
-    handles = [
-        Line2D([0], [0], color=col, linewidth=3, label=str(val))
-        for val, col in SEG_COLORS
-    ]
-    axis.legend(handles=handles, title="Segment log2")
+    if seg_norm is not None:
+        sm = cm.ScalarMappable(norm=seg_norm, cmap=SEG_CMAP)
+        sm.set_array([])
+        axis.get_figure().colorbar(sm, ax=axis, label="Segment log2")
     return axis
 
 
@@ -245,11 +252,14 @@ def snv_on_genome(axis, variants, chrom_sizes, segments, do_trend, segment_color
     chrom_snvs = dict(variants.by_chromosome())
     if segments:
         chrom_segs = dict(segments.by_chromosome())
+        seg_norm = colors.Normalize(vmin=segments.log2.min(), vmax=segments.log2.max())
     elif do_trend:
         # Pretend a single segment covers each chromosome
         chrom_segs = {chrom: None for chrom in chrom_snvs}
+        seg_norm = None
     else:
         chrom_segs = {}
+        seg_norm = None
 
     for chrom, x_offset in x_starts.items():
         if chrom not in chrom_snvs:
@@ -264,6 +274,7 @@ def snv_on_genome(axis, variants, chrom_sizes, segments, do_trend, segment_color
             edgecolor="none",
             alpha=0.2,
             marker=".",
+            s=15,
         )
         # Trend bars: always calculated, only shown on request
         if chrom in chrom_segs:
@@ -272,7 +283,7 @@ def snv_on_genome(axis, variants, chrom_sizes, segments, do_trend, segment_color
             for seg, v_freq in get_segment_vafs(snvs, segs):
                 if seg:
                     posn = [seg.start + x_offset, seg.end + x_offset]
-                    color = choose_segment_color(seg, default_bright=False)
+                    color = choose_segment_color(seg, default_bright=False, norm=seg_norm)
                 else:
                     posn = [snvs.start.iat[0] + x_offset, snvs.start.iat[-1] + x_offset]
                     color = TREND_COLOR
@@ -507,6 +518,10 @@ def cnv_on_chromosome(
         w = 46 * probes["weight"] ** 2 + 2
     else:
         w = np.repeat(30, len(x))
+    w = w * 1.2
+    seg_norm = None
+    if segments is not None and len(segments):
+        seg_norm = colors.Normalize(vmin=segments.log2.min(), vmax=segments.log2.max())
 
     # Configure axes
     if not y_min:
@@ -560,7 +575,7 @@ def cnv_on_chromosome(
     # Draw segments as horizontal lines
     if segments:
         for row in segments:
-            color = choose_segment_color(row)
+            color = choose_segment_color(row, norm=seg_norm)
             axis.plot(
                 (row.start * MB, row.end * MB),
                 (row.log2, row.log2),
@@ -582,7 +597,7 @@ def cnv_on_chromosome(
             # Signal them as triangles crossing y-axis:
             x_hidden = segments.start[hidden_seg] * MB
             y_hidden = np.array([y_min] * len(x_hidden))
-            colors = [_color_from_log2(v) for v in segments.log2[hidden_seg]]
+            colors = [_color_from_log2(v, seg_norm) for v in segments.log2[hidden_seg]]
             axis.scatter(
                 x_hidden,
                 y_hidden,
@@ -594,11 +609,10 @@ def cnv_on_chromosome(
                 clip_on=False,
                 zorder=10,
             )
-    handles = [
-        Line2D([0], [0], color=col, linewidth=3, label=str(val))
-        for val, col in SEG_COLORS
-    ]
-    axis.legend(handles=handles, title="Segment log2")
+    if seg_norm is not None:
+        sm = cm.ScalarMappable(norm=seg_norm, cmap=SEG_CMAP)
+        sm.set_array([])
+        axis.get_figure().colorbar(sm, ax=axis, label="Segment log2")
     return axis
 
 
@@ -618,13 +632,16 @@ def snv_on_chromosome(axis, variants, segments, genes, do_trend, by_bin, segment
 
     x_mb = variants["start"].values * MB
     y = variants["alt_freq"].values
-    axis.scatter(x_mb, y, color=POINT_COLOR, alpha=0.3)
+    axis.scatter(x_mb, y, color=POINT_COLOR, alpha=0.3, s=15)
+    seg_norm = None
+    if segments is not None and len(segments):
+        seg_norm = colors.Normalize(vmin=segments.log2.min(), vmax=segments.log2.max())
     if segments or do_trend:
         # Draw average VAF within each segment
         for seg, v_freq in get_segment_vafs(variants, segments):
             if seg:
                 posn = [seg.start * MB, seg.end * MB]
-                color = choose_segment_color(seg, default_bright=False)
+                color = choose_segment_color(seg, default_bright=False, norm=seg_norm)
             else:
                 posn = [variants.start.iat[0] * MB, variants.start.iat[-1] * MB]
                 color = TREND_COLOR
@@ -693,7 +710,7 @@ def setup_chromosome(axis, y_min=None, y_max=None, y_label=None):
 # === Shared ===
 
 
-def choose_segment_color(segment, default_bright=True):
+def choose_segment_color(segment, default_bright=True, norm=None):
     """Choose a display color based on a segment's CNA status.
 
     Uses the fields added by the 'call' command. If these aren't present, use a
@@ -702,7 +719,7 @@ def choose_segment_color(segment, default_bright=True):
     For sex chromosomes, some single-copy deletions or gains might not be
     highlighted, since sample sex isn't used to infer the neutral ploidies.
     """
-    highlight_color = _color_from_log2(segment.log2)
+    highlight_color = _color_from_log2(segment.log2, norm)
     neutral_color = TREND_COLOR
     if "cn" not in segment._fields:
         # No 'call' info
