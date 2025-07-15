@@ -151,14 +151,11 @@ def cnv_on_genome(
     segment_color=SEG_COLOR,
     title=None,
 ):
-    """Plot bin ratios and/or segments for all chromosomes on one plot."""
-    # Configure axes etc.
+    """Plot bin ratios and/or segments for all chromosomes on one plot, with perfectly separated colorbar."""
     axis.axhline(color="k")
     axis.set_ylabel("Copy ratio (log2)")
     if not (y_min and y_max):
         if segments:
-            # Auto-scale y-axis according to segment mean-coverage values
-            # (Avoid spuriously low log2 values in HLA and chrY)
             low_chroms = segments.chromosome.isin(("6", "chr6", "Y", "chrY"))
             seg_auto_vals = segments[~low_chroms]["log2"].dropna()
             if not y_min:
@@ -180,31 +177,23 @@ def cnv_on_genome(
                 y_max = 2.5
     axis.set_ylim(y_min, y_max)
 
-    # Group probes by chromosome (to calculate plotting coordinates)
     if probes:
         chrom_sizes = plots.chromosome_sizes(probes)
         chrom_probes = dict(probes.by_chromosome())
-        # Precalculate smoothing window size so all chromosomes have similar
-        # degree of smoothness
-        # NB: Target panel has ~1k bins/chrom. -> 250-bin window
-        #     Exome: ~10k bins/chrom. -> 2500-bin window
-        window_size = int(round(0.15 * len(probes) / probes.chromosome.nunique()))
     else:
         chrom_sizes = plots.chromosome_sizes(segments)
-    # Same for segment calls
     chrom_segs = dict(segments.by_chromosome()) if segments else {}
-    seg_norm = None
+    seg_norm = colors.Normalize(vmin=-1.5, vmax=1.5)
     if segments is not None and len(segments):
-        seg_norm = colors.Normalize(vmin=segments.log2.min(), vmax=segments.log2.max())
+        seg_norm = colors.Normalize(vmin=-1.5, vmax=1.5)
 
-    # Plot points & segments
     pad = 0.003 * sum(chrom_sizes.values())
     x_starts = collections.OrderedDict()
     curr_offset = pad
     label_positions = []
     for chrom, size in chrom_sizes.items():
         x_starts[chrom] = curr_offset
-        axis.axvline(x=curr_offset, color="k", linewidth=2, zorder=20)
+        axis.axvline(x=curr_offset, color="k", linewidth=1.3, zorder=20)
         if probes and chrom in chrom_probes:
             subprobes = chrom_probes[chrom]
             pos = 0.5 * (subprobes["start"].min() + subprobes["end"].max()) + curr_offset
@@ -213,8 +202,47 @@ def cnv_on_genome(
         label_positions.append((pos, chrom))
         curr_offset += size + 2 * pad
     if label_positions:
-        axis.axvline(x=curr_offset - pad, color="k", linewidth=2, zorder=20)
+        axis.axvline(x=curr_offset - pad, color="k", linewidth=1.3, zorder=20)
     axis.set_xlim(0, curr_offset)
+
+    # ---- BOTTOM AXIS: Mb scale ticks ----
+    tick_positions_minor = []
+    tick_positions_major = []
+    tick_labels_major = []
+    for chrom, start in x_starts.items():
+        size = chrom_sizes[chrom]
+        num_ticks_minor = int(size // 2e7)
+        num_ticks_major = int(size // 1e8)
+        for i in range(1, num_ticks_minor + 1):
+            tick_pos = start + i * 2e7
+            if tick_pos < start + size:
+                tick_positions_minor.append(tick_pos)
+        for i in range(1, num_ticks_major + 1):
+            tick_pos = start + i * 1e8
+            if tick_pos < start + size:
+                tick_positions_major.append(tick_pos)
+                tick_labels_major.append(f"{int(i * 100)} Mb")
+    axis.set_xticks(tick_positions_major)
+    axis.set_xticklabels(tick_labels_major, fontsize=10, rotation=90, ha="center", va="top")
+    axis.set_xticks(tick_positions_minor, minor=True)
+    axis.tick_params(axis='x', which='major', bottom=True, top=False, labelbottom=True, length=8)
+    axis.tick_params(axis='x', which='minor', bottom=True, top=False, labelbottom=False, length=4, color='#BBBBBB')
+    axis.xaxis.set_label_position('bottom')
+    axis.xaxis.tick_bottom()
+
+    # ---- TOP AXIS: Chromosome labels ----
+    axis2 = axis.twiny()
+    axis2.set_xlim(axis.get_xlim())
+    chrom_label_positions = [p[0] for p in label_positions]
+    chrom_label_names = [f"{p[1]}" for p in label_positions]
+    axis2.set_xticks(chrom_label_positions)
+    axis2.set_xticklabels(chrom_label_names, fontsize=15, rotation=90, ha="center", va="bottom")
+    axis2.tick_params(axis='x', which='major', bottom=False, top=True, labelbottom=False, labeltop=True, length=8)
+    axis2.xaxis.set_label_position('top')
+    axis2.xaxis.tick_top()
+    axis2.spines["bottom"].set_visible(False)
+    axis2.spines["right"].set_visible(False)
+    axis2.spines["left"].set_visible(False)
 
     for chrom, x_offset in x_starts.items():
         if probes and chrom in chrom_probes:
@@ -227,13 +255,9 @@ def cnv_on_genome(
                 color=POINT_COLOR,
                 edgecolor="none",
                 alpha=0.2,
-                s=15,
+                s=20,
             )
             if do_trend:
-                # ENH break trendline by chromosome arm boundaries?
-                # Here and in subsequent occurrences, it's important to use snap=False
-                # to avoid short lines/segment disappearing when saving as PNG.
-                # See also: https://github.com/etal/cnvkit/issues/604
                 axis.plot(
                     x,
                     subprobes.smooth_log2(),
@@ -242,7 +266,6 @@ def cnv_on_genome(
                     zorder=-1,
                     snap=False,
                 )
-
         if chrom in chrom_segs:
             for seg in chrom_segs[chrom]:
                 color = choose_segment_color(seg, norm=seg_norm)
@@ -255,33 +278,20 @@ def cnv_on_genome(
                     snap=False,
                 )
 
-    axis.set_xticks([p[0] for p in label_positions])
-    axis.set_xticklabels(
-        [f"chr{p[1]}" for p in label_positions],
-        fontsize=28,
-        rotation=75,
-        ha="center",
-        va="top",
-    )
-    axis.set_ylabel("Segment log2", fontsize=28)
-    axis.tick_params(axis="y", labelsize=24)
-    axis.tick_params(axis="x", labelsize=24)
     if title is not None:
-        axis.set_title(title, fontsize=32)
-    axis.tick_params(which="minor", bottom=False, left=False)
-    axis.spines["right"].set_visible(False)
-    axis.spines["top"].set_visible(False)
+        axis.set_title(title, fontsize=23)
 
+    # --- PATCH: Perfectly separated colorbar ---
     if seg_norm is not None:
         sm = cm.ScalarMappable(norm=seg_norm, cmap=SEG_CMAP)
         sm.set_array([])
-        cbar = axis.get_figure().colorbar(
-            sm, ax=axis, orientation="vertical", pad=0.01, aspect=30
-        )
-        cbar.set_label("Segment log2", fontsize=28)
-        cbar.ax.tick_params(labelsize=24)
-
-    pyplot.subplots_adjust(bottom=0.18, left=0.04, right=0.98, top=0.90)
+        fig = axis.get_figure()
+        # [left, bottom, width, height] as fraction of figure
+        cbar_ax = fig.add_axes([0.955, 0.18, 0.005, 0.78])
+        cbar = fig.colorbar(sm, cax=cbar_ax)
+        cbar.set_label("CNV segment (log2)", fontsize=15)
+        cbar.ax.tick_params(labelsize=15)
+    pyplot.subplots_adjust(bottom=0.18, left=0.04, right=0.94, top=0.90)
     return axis
 
 

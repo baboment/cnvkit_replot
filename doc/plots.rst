@@ -29,7 +29,9 @@ options available::
 
 Plot bin-level log2 coverages and segmentation calls together.  Without any
 further arguments, this plots the genome-wide copy number in a form familiar to
-those who have used array CGH.
+those who have used array CGH.  The genome view uses megabase tick marks along
+the lower axis and labels each chromosome on a separate top axis with a colorbar
+indicating segment log2 ratios.
 
 ::
 
