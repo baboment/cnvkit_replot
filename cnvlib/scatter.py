@@ -12,19 +12,32 @@ from . import core, params, plots
 from .plots import MB
 from .cnary import CopyNumArray as CNA
 
+from matplotlib import pyplot as plt
+from mpl_toolkits.axes_grid1 import make_axes_locatable
+
+from matplotlib import rcParams
+
+# Prefer Arial; fall back to Liberation Sans / DejaVu Sans if Arial isn't installed
+rcParams.update({
+    "font.family": "sans-serif",
+    "font.sans-serif": ["Arial", "Liberation Sans", "DejaVu Sans"],
+    "axes.unicode_minus": False,   # nicer minus sign rendering
+})
+
+
 HIGHLIGHT_COLOR = "gold"
-POINT_COLOR = "#606060"
+POINT_COLOR = "#AAA8A8"
 SEG_COLOR = "darkorange"
-TREND_COLOR = "#A0A0A0"
-SEG_CMAP = pyplot.get_cmap("coolwarm")
+TREND_COLOR = "#6A6A6A"
+SEG_CMAP = pyplot.get_cmap("seismic")
 SEG_COLORS = [
-    (-1.1, "#08306b"),
-    (-0.5, "#2171b5"),
-    (-0.25, "#6baed6"),
+    (-1.1, "#053061"),
+    (-0.5, "#2166ac"),
+    (-0.25, "#4393c3"),
     (0.0, TREND_COLOR),
-    (0.25, "#fdbb84"),
-    (0.5, "#ef6548"),
-    (0.7, "#b30000"),
+    (0.25, "#d6604d"),
+    (0.5, "#b2182b"),
+    (1, "#67001f"),
 ]
 
 def _color_from_log2(value, norm=None):
@@ -48,7 +61,7 @@ def do_scatter(
     window_width=1e6,
     y_min=None,
     y_max=None,
-    fig_size=(24, 5),
+    fig_size=(40, 3),
     antitarget_marker=None,
     segment_color=SEG_COLOR,
     title=None,
@@ -108,6 +121,7 @@ def genome_scatter(
     y_min=None,
     y_max=None,
     title=None,
+    fig_size=(40, 4),
     segment_color=SEG_COLOR,
 ):
     """Plot all chromosomes, concatenated on one plot."""
@@ -150,12 +164,20 @@ def cnv_on_genome(
     y_max=None,
     segment_color=SEG_COLOR,
     title=None,
+    fig_size=(40, 4),
 ):
-    """Plot bin ratios and/or segments for all chromosomes on one plot, with perfectly separated colorbar."""
-    axis.axhline(color="k")
-    axis.set_ylabel("Copy ratio (log2)")
+    """Plot bin ratios and segments for all chromosomes on one plot, with:
+       - bottom chromosome labels (1..22,X,Y), bigger font
+       - blue points for log2 >= 0, red for log2 < 0
+       - dark-grey segment lines
+       - no top/bottom spines (clean look)
+    """
+    # y axis label unchanged
+    axis.set_ylabel("Copy ratio (log2)", fontsize=20)
+
+    # ---- y-limits (auto if not provided)
     if not (y_min and y_max):
-        if segments:
+        if segments is not None and len(segments):
             low_chroms = segments.chromosome.isin(("6", "chr6", "Y", "chrY"))
             seg_auto_vals = segments[~low_chroms]["log2"].dropna()
             if not y_min:
@@ -171,29 +193,29 @@ def cnv_on_genome(
                     else 2.5
                 )
         else:
-            if not y_min:
-                y_min = -2.5
-            if not y_max:
-                y_max = 2.5
+            y_min = y_min or -2.5
+            y_max = y_max or  2.5
+    y_min, y_max = -2.0, 2.0
     axis.set_ylim(y_min, y_max)
 
+    # ---- chromosome sizes & grouping
     if probes:
         chrom_sizes = plots.chromosome_sizes(probes)
         chrom_probes = dict(probes.by_chromosome())
     else:
         chrom_sizes = plots.chromosome_sizes(segments)
-    chrom_segs = dict(segments.by_chromosome()) if segments else {}
-    seg_norm = colors.Normalize(vmin=-1.5, vmax=1.5)
-    if segments is not None and len(segments):
-        seg_norm = colors.Normalize(vmin=-1.5, vmax=1.5)
+        chrom_probes = {}
 
+    chrom_segs = dict(segments.by_chromosome()) if segments else {}
+
+    # ---- create padded layout & dividers
     pad = 0.003 * sum(chrom_sizes.values())
     x_starts = collections.OrderedDict()
     curr_offset = pad
-    label_positions = []
+    label_positions = []  # (center_pos, chrom_name)
     for chrom, size in chrom_sizes.items():
         x_starts[chrom] = curr_offset
-        axis.axvline(x=curr_offset, color="k", linewidth=1.3, zorder=20)
+        axis.axvline(x=curr_offset, color="#000000", linewidth=1.2, zorder=20)
         if probes and chrom in chrom_probes:
             subprobes = chrom_probes[chrom]
             pos = 0.5 * (subprobes["start"].min() + subprobes["end"].max()) + curr_offset
@@ -202,60 +224,25 @@ def cnv_on_genome(
         label_positions.append((pos, chrom))
         curr_offset += size + 2 * pad
     if label_positions:
-        axis.axvline(x=curr_offset - pad, color="k", linewidth=1.3, zorder=20)
+        axis.axvline(x=curr_offset - pad, color="#000000", linewidth=1.2, zorder=20)
     axis.set_xlim(0, curr_offset)
 
-    # ---- BOTTOM AXIS: Mb scale ticks ----
-    tick_positions_minor = []
-    tick_positions_major = []
-    tick_labels_major = []
-    for chrom, start in x_starts.items():
-        size = chrom_sizes[chrom]
-        num_ticks_minor = int(size // 2e7)
-        num_ticks_major = int(size // 1e8)
-        for i in range(1, num_ticks_minor + 1):
-            tick_pos = start + i * 2e7
-            if tick_pos < start + size:
-                tick_positions_minor.append(tick_pos)
-        for i in range(1, num_ticks_major + 1):
-            tick_pos = start + i * 1e8
-            if tick_pos < start + size:
-                tick_positions_major.append(tick_pos)
-                tick_labels_major.append(f"{int(i * 100)} Mb")
-    axis.set_xticks(tick_positions_major)
-    axis.set_xticklabels(tick_labels_major, fontsize=10, rotation=90, ha="center", va="top")
-    axis.set_xticks(tick_positions_minor, minor=True)
-    axis.tick_params(axis='x', which='major', bottom=True, top=False, labelbottom=True, length=8)
-    axis.tick_params(axis='x', which='minor', bottom=True, top=False, labelbottom=False, length=4, color='#BBBBBB')
-    axis.xaxis.set_label_position('bottom')
-    axis.xaxis.tick_bottom()
-
-    # ---- TOP AXIS: Chromosome labels ----
-    axis2 = axis.twiny()
-    axis2.set_xlim(axis.get_xlim())
-    chrom_label_positions = [p[0] for p in label_positions]
-    chrom_label_names = [f"{p[1]}" for p in label_positions]
-    axis2.set_xticks(chrom_label_positions)
-    axis2.set_xticklabels(chrom_label_names, fontsize=15, rotation=90, ha="center", va="bottom")
-    axis2.tick_params(axis='x', which='major', bottom=False, top=True, labelbottom=False, labeltop=True, length=8)
-    axis2.xaxis.set_label_position('top')
-    axis2.xaxis.tick_top()
-    axis2.spines["bottom"].set_visible(False)
-    axis2.spines["right"].set_visible(False)
-    axis2.spines["left"].set_visible(False)
-
+    # ---- scatter: blue for >=0, red for <0
     for chrom, x_offset in x_starts.items():
         if probes and chrom in chrom_probes:
             subprobes = chrom_probes[chrom]
             x = 0.5 * (subprobes["start"] + subprobes["end"]) + x_offset
+            y = subprobes["log2"].values
+            # color by sign
+            c = np.where(y >= 0.0, "#1A35FF", "#FF1A34")  # blue / red
             axis.scatter(
-                x,
-                subprobes["log2"],
+                x, y,
+                c=c,
                 marker=".",
-                color=POINT_COLOR,
                 edgecolor="none",
-                alpha=0.2,
-                s=20,
+                alpha=0.5,
+                s=18,
+                rasterized=True,
             )
             if do_trend:
                 axis.plot(
@@ -266,91 +253,42 @@ def cnv_on_genome(
                     zorder=-1,
                     snap=False,
                 )
-        if chrom in chrom_segs:
-            for seg in chrom_segs[chrom]:
-                color = choose_segment_color(seg, norm=seg_norm)
-                axis.plot(
-                    (seg.start + x_offset, seg.end + x_offset),
-                    (seg.log2, seg.log2),
-                    color=color,
-                    linewidth=3,
-                    solid_capstyle="round",
-                    snap=False,
-                )
 
-    if title is not None:
-        axis.set_title(title, fontsize=23)
-
-    # --- PATCH: Perfectly separated colorbar ---
-    if seg_norm is not None:
-        sm = cm.ScalarMappable(norm=seg_norm, cmap=SEG_CMAP)
-        sm.set_array([])
-        fig = axis.get_figure()
-        # [left, bottom, width, height] as fraction of figure
-        cbar_ax = fig.add_axes([0.955, 0.18, 0.005, 0.78])
-        cbar = fig.colorbar(sm, cax=cbar_ax)
-        cbar.set_label("CNV segment (log2)", fontsize=15)
-        cbar.ax.tick_params(labelsize=15)
-    pyplot.subplots_adjust(bottom=0.18, left=0.04, right=0.94, top=0.90)
-    return axis
-
-
-def snv_on_genome(axis, variants, chrom_sizes, segments, do_trend, segment_color):
-    """Plot a scatter-plot of SNP chromosomal positions and shifts."""
-    axis.set_ylim(0.0, 1.0)
-    axis.set_ylabel("VAF")
-    x_starts = plots.plot_chromosome_dividers(axis, chrom_sizes)
-
-    # Calculate the coordinates of plot components
-    chrom_snvs = dict(variants.by_chromosome())
-    if segments:
-        chrom_segs = dict(segments.by_chromosome())
-        seg_norm = colors.Normalize(vmin=segments.log2.min(), vmax=segments.log2.max())
-    elif do_trend:
-        # Pretend a single segment covers each chromosome
-        chrom_segs = {chrom: None for chrom in chrom_snvs}
-        seg_norm = None
-    else:
-        chrom_segs = {}
-        seg_norm = None
-
+    # ---- segments: all dark grey
     for chrom, x_offset in x_starts.items():
-        if chrom not in chrom_snvs:
-            continue
+        for seg in chrom_segs.get(chrom, []):
+            axis.plot(
+                (seg.start + x_offset, seg.end + x_offset),
+                (seg.log2, seg.log2),
+                color="#585858",     # dark grey for every segment
+                linewidth=5,
+                solid_capstyle="round",
+                snap=False,
+                zorder=10,
+            )
 
-        snvs = chrom_snvs[chrom]
-        # Plot the points
-        axis.scatter(
-            snvs["start"].values + x_offset,
-            snvs["alt_freq"].values,
-            color=POINT_COLOR,
-            edgecolor="none",
-            alpha=0.2,
-            marker=".",
-            s=15,
-        )
-        # Trend bars: always calculated, only shown on request
-        if chrom in chrom_segs:
-            # Draw average VAF within each segment
-            segs = chrom_segs[chrom]
-            for seg, v_freq in get_segment_vafs(snvs, segs):
-                if seg:
-                    posn = [seg.start + x_offset, seg.end + x_offset]
-                    color = choose_segment_color(seg, default_bright=False, norm=seg_norm)
-                else:
-                    posn = [snvs.start.iat[0] + x_offset, snvs.start.iat[-1] + x_offset]
-                    color = TREND_COLOR
-                axis.plot(
-                    posn,
-                    [v_freq, v_freq],
-                    color=color,
-                    linewidth=2,
-                    zorder=-1,
-                    solid_capstyle="round",
-                    snap=False,
-                )
+    # ---- bottom chromosome labels, larger; no Mb ticks
+    tick_positions = [p for p, _ in label_positions]
+    tick_labels = [
+        (name[3:] if name.lower().startswith("chr") else name)
+        for _, name in label_positions
+    ]
+    axis.set_xticks(tick_positions)
+    axis.set_xticklabels(tick_labels, fontsize=20)  # bigger labels
+    axis.tick_params(axis="x", which="both", bottom=True, top=False, labelbottom=True)
+    axis.tick_params(axis="y", labelsize=16)
+    # remove any minor/major Mb ticks if they were set earlier
+    axis.set_xticks([], minor=True)
+
+    # ---- clean frame: remove top & bottom black lines (spines)
+    axis.spines["top"].set_visible(False)
+    axis.spines["bottom"].set_visible(False)
+    # keep left/right so y-axis & dividers remain readable
+    axis.spines["right"].set_visible(False)
+
+    # no colorbar here (all segments are dark grey; points are fixed blue/red)
+    pyplot.subplots_adjust(bottom=0.18, left=0.06, right=0.98, top=0.90)
     return axis
-
 
 # === Chromosome-level scatter plots ===
 
